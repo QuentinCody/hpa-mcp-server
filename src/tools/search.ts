@@ -16,7 +16,7 @@ interface SearchEnv {
 
 export function registerSearch(server: McpServer, env?: SearchEnv) {
     server.registerTool(
-        "hpa_search",
+        "hpa_gene_search",
         {
             title: "Search Human Protein Atlas",
             description:
@@ -31,10 +31,10 @@ export function registerSearch(server: McpServer, env?: SearchEnv) {
                     .optional()
                     .describe("Comma-separated column codes to include (e.g. 'g,eg,up,rnats,rnatspm'). Default: gene name, Ensembl, UniProt."),
                 format: z
-                    .enum(["json", "tsv"])
+                    .string()
                     .default("json")
                     .optional()
-                    .describe("Response format"),
+                    .describe("Response format: 'json' or 'tsv' (default: json)"),
             },
         },
         async (args, extra) => {

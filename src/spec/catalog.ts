@@ -10,7 +10,6 @@ export const hpaCatalog: ApiCatalog = {
         "- Gene data is accessed via /{ENSG_ID}.json (Ensembl gene ID)\n" +
         "- Search via /api/search_download.php with query params\n" +
         "- Code Mode paths: use /gene/{id} (mapped to /{id}.json) and /search (mapped to /api/search_download.php)\n" +
-        "- For gene lookup, prefer the hpa_gene_lookup hand-built tool\n" +
         "- Column codes for search: g=Gene, eg=Ensembl, up=UniProt, rnats=RNA tissue specificity, pe=Protein evidence\n" +
         "  t=Tissue expression, scl=Subcellular location, pa=Pathology, cs=Cancer specificity",
     endpoints: [
@@ -19,7 +18,6 @@ export const hpaCatalog: ApiCatalog = {
             path: "/gene/{ensembl_id}",
             summary: "Get full gene entry with tissue expression, subcellular localization, pathology, and cancer data",
             category: "gene",
-            coveredByTool: "hpa_gene_lookup",
             pathParams: [
                 { name: "ensembl_id", type: "string", required: true, description: "Ensembl gene ID (e.g. ENSG00000141510)" },
             ],
@@ -29,7 +27,6 @@ export const hpaCatalog: ApiCatalog = {
             path: "/search",
             summary: "Search HPA genes by name, tissue, cancer type, or other criteria with customizable columns",
             category: "search",
-            coveredByTool: "hpa_search",
             queryParams: [
                 { name: "search", type: "string", required: true, description: "Search query" },
                 { name: "format", type: "string", required: false, description: "Response format", enum: ["json", "tsv"] },

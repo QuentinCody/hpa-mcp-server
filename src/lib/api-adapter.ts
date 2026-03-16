@@ -14,6 +14,13 @@ export function createHpaApiFetch(): ApiFetchFn {
         // Search: /search → /api/search_download.php
         else if (path === "/search" || path.startsWith("/search?")) {
             path = "/api/search_download.php";
+            // Default to uncompressed JSON to avoid gzip binary in Code Mode
+            if (!request.params?.compress) {
+                request.params = { ...request.params, compress: "no" };
+            }
+            if (!request.params?.format) {
+                request.params = { ...request.params, format: "json" };
+            }
         }
 
         const response = await hpaFetch(path, request.params);
