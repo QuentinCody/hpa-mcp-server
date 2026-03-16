@@ -43,6 +43,7 @@ export function registerSearch(server: McpServer, env?: SearchEnv) {
                 const params: Record<string, unknown> = {
                     search: String(args.search),
                     format: args.format || "json",
+                    compress: "no",
                 };
                 if (args.columns) {
                     params.columns = String(args.columns);
