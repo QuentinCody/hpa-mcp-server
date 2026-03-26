@@ -14,7 +14,7 @@ interface LookupEnv {
     };
 }
 
-export function registerGeneLookup(server: McpServer, env?: LookupEnv) {
+export function registerGeneLookup(server: McpServer, env?: LookupEnv): void {
     server.registerTool(
         "hpa_gene_lookup",
         {
@@ -46,7 +46,7 @@ export function registerGeneLookup(server: McpServer, env?: LookupEnv) {
                 if (shouldStage(responseSize) && runtimeEnv?.HPA_DATA_DO) {
                     const staged = await stageToDoAndRespond(
                         data,
-                        runtimeEnv.HPA_DATA_DO as any,
+                        runtimeEnv.HPA_DATA_DO as DurableObjectNamespace,
                         "gene_lookup",
                         undefined,
                         undefined,

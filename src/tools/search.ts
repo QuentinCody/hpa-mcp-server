@@ -14,7 +14,7 @@ interface SearchEnv {
     };
 }
 
-export function registerSearch(server: McpServer, env?: SearchEnv) {
+export function registerSearch(server: McpServer, env?: SearchEnv): void {
     server.registerTool(
         "hpa_gene_search",
         {
@@ -62,7 +62,7 @@ export function registerSearch(server: McpServer, env?: SearchEnv) {
                 if (shouldStage(responseSize) && runtimeEnv?.HPA_DATA_DO) {
                     const staged = await stageToDoAndRespond(
                         data,
-                        runtimeEnv.HPA_DATA_DO as any,
+                        runtimeEnv.HPA_DATA_DO as DurableObjectNamespace,
                         "search",
                         undefined,
                         undefined,

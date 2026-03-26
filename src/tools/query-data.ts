@@ -6,7 +6,7 @@ interface QueryEnv {
     HPA_DATA_DO?: unknown;
 }
 
-export function registerQueryData(server: McpServer, env?: QueryEnv) {
+export function registerQueryData(server: McpServer, env?: QueryEnv): void {
     const handler = createQueryDataHandler("HPA_DATA_DO", "hpa");
 
     server.registerTool(
