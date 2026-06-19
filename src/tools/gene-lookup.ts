@@ -51,7 +51,7 @@ export function registerGeneLookup(server: McpServer, env?: LookupEnv): void {
                         undefined,
                         undefined,
                         "hpa",
-                        (extra as { sessionId?: string })?.sessionId,
+                        (extra as Record<string, unknown>),
                     );
                     return createCodeModeResponse(
                         {

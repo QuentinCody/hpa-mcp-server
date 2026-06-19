@@ -67,7 +67,7 @@ export function registerSearch(server: McpServer, env?: SearchEnv): void {
                         undefined,
                         undefined,
                         "hpa",
-                        (extra as { sessionId?: string })?.sessionId,
+                        (extra as Record<string, unknown>),
                     );
                     return createCodeModeResponse(
                         {

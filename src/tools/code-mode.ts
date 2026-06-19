@@ -27,6 +27,13 @@ export function registerCodeMode(
         apiFetch,
         doNamespace: env.HPA_DATA_DO,
         loader: env.CODE_MODE_LOADER,
+        // Verifiable provenance: every hpa_execute result carries a _meta.citation.
+        source: {
+            id: "hpa",
+            name: "Human Protein Atlas",
+            url: "https://www.proteinatlas.org",
+            license: "CC BY-SA 3.0",
+        },
     });
     executeTool.register(server as unknown as { tool: (...args: unknown[]) => void });
 }
