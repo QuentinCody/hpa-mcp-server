@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { CHAT_SCOPE_META_KEY, getRequestScope, type MaybeExtra } from "./request-scope";
+import {
+	CHAT_SCOPE_META_KEY,
+	childTraceparent,
+	getRequestCorrelation,
+	getRequestScope,
+	getRequestTraceparent,
+	type MaybeExtra,
+	nestedCallMeta,
+	TRACEPARENT_META_KEY,
+} from "./request-scope";
+
+const TRACEPARENT = "00-0123456789abcdef0123456789abcdef-0123456789abcdef-01";
 
 describe("getRequestScope", () => {
 	it("returns undefined for undefined input", () => {
@@ -150,5 +161,56 @@ describe("getRequestScope", () => {
 			signal: {} as unknown,
 		};
 		expect(getRequestScope(extra)).toBe("ok");
+	});
+});
+
+describe("request trace correlation", () => {
+	it("reads valid trace context from metadata before the transport header", () => {
+		const extra: MaybeExtra = {
+			_meta: { [TRACEPARENT_META_KEY]: TRACEPARENT },
+			requestInfo: {
+				headers: {
+					traceparent:
+						"00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-00",
+				},
+			},
+		};
+		expect(getRequestTraceparent(extra)).toBe(TRACEPARENT);
+	});
+
+	it("rejects malformed and all-zero trace identifiers", () => {
+		expect(
+			getRequestTraceparent({ _meta: { traceparent: "not-a-trace" } }),
+		).toBeUndefined();
+		expect(
+			getRequestTraceparent({
+				_meta: {
+					traceparent:
+						"00-00000000000000000000000000000000-0123456789abcdef-01",
+				},
+			}),
+		).toBeUndefined();
+	});
+
+	it("mints a child span with the same trace id and flags", () => {
+		const child = childTraceparent(TRACEPARENT)!;
+		expect(child).toMatch(
+			/^00-0123456789abcdef0123456789abcdef-[0-9a-f]{16}-01$/,
+		);
+		expect(child).not.toBe(TRACEPARENT);
+	});
+
+	it("combines chat and trace context and emits nested-call metadata", () => {
+		const correlation = getRequestCorrelation({
+			_meta: {
+				[CHAT_SCOPE_META_KEY]: "chat-7",
+				[TRACEPARENT_META_KEY]: TRACEPARENT,
+			},
+		});
+		const meta = nestedCallMeta(correlation)!;
+		expect(meta[CHAT_SCOPE_META_KEY]).toBe("chat-7");
+		expect(meta[TRACEPARENT_META_KEY]).toMatch(
+			/^00-0123456789abcdef0123456789abcdef-[0-9a-f]{16}-01$/,
+		);
 	});
 });

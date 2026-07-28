@@ -14,13 +14,12 @@
  * which channel the scope arrived on. It tries, in order:
  *
  *   1. `extra._meta?.[CHAT_SCOPE_META_KEY]`
- *      — Spec-aligned. Set by the client when it injects per-call _meta.
- *        Not used today; will be wired up in Phase 0b.
+ *      — Spec-aligned. Set by clients that inject per-call `_meta`, including
+ *        the orchestrator's nested tool calls.
  *
  *   2. `extra.requestInfo?.headers["mcp-chat-id"]`
  *      — HTTP header bridge. Set by the client on the transport's
- *        outbound headers. The path we'll use in Phase 0b because
- *        `@ai-sdk/mcp@1.x` has no per-call _meta hook.
+ *        outbound headers for SDK paths without a per-call `_meta` hook.
  *
  *   3. `extra.sessionId`
  *      — Legacy MCP transport session. Still populated by SDKs serving
@@ -43,10 +42,12 @@
  * generic identifier that another server or extension could also claim, so we
  * namespace under a domain we control (`bio.quentincody.dev` reversed).
  *
- * Exported as a constant so the (not-yet-written) client-side injector and the
- * server-side reader cannot drift apart on a typo.
+ * Exported as a constant so client-side injectors and server-side readers
+ * cannot drift apart on a typo.
  */
 export const CHAT_SCOPE_META_KEY = "dev.quentincody.bio/chatId";
+export const TRACEPARENT_META_KEY = "traceparent";
+const TRACEPARENT_PATTERN = /^00-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})$/i;
 
 export interface MaybeExtra {
 	/** MCP transport session ID. Deprecated by the 2026-07-28 spec. */
@@ -63,6 +64,78 @@ export interface MaybeExtra {
 	[k: string]: unknown;
 }
 
+export interface RequestCorrelation {
+	chatId?: string;
+	traceparent?: string;
+}
+
+function headerValue(
+	headers: Record<string, string | string[] | undefined> | undefined,
+	lowercase: string,
+	canonical: string,
+): string | undefined {
+	const raw = headers?.[lowercase] ?? headers?.[canonical];
+	const value = Array.isArray(raw) ? raw[0] : raw;
+	return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+export function validTraceparent(value: unknown): string | undefined {
+	if (typeof value !== "string") return undefined;
+	const match = TRACEPARENT_PATTERN.exec(value);
+	if (!match || /^0+$/.test(match[1]) || /^0+$/.test(match[2]))
+		return undefined;
+	return value.toLowerCase();
+}
+
+export function getRequestTraceparent(
+	source: MaybeExtra | undefined,
+): string | undefined {
+	return (
+		validTraceparent(source?._meta?.[TRACEPARENT_META_KEY]) ??
+		validTraceparent(
+			headerValue(source?.requestInfo?.headers, "traceparent", "Traceparent"),
+		)
+	);
+}
+
+function randomHex(byteLength: number): string {
+	const bytes = new Uint8Array(byteLength);
+	crypto.getRandomValues(bytes);
+	return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(
+		"",
+	);
+}
+
+/** Create a W3C child span while preserving the parent trace and flags. */
+export function childTraceparent(
+	parent: string | undefined,
+): string | undefined {
+	const valid = validTraceparent(parent);
+	if (!valid) return undefined;
+	const [, traceId, , flags] = TRACEPARENT_PATTERN.exec(valid)!;
+	return `00-${traceId}-${randomHex(8)}-${flags}`;
+}
+
+export function getRequestCorrelation(
+	source: MaybeExtra | undefined,
+): RequestCorrelation | undefined {
+	const chatId = getRequestScope(source);
+	const traceparent = getRequestTraceparent(source);
+	return chatId || traceparent ? { chatId, traceparent } : undefined;
+}
+
+/** Build fresh per-call metadata for one nested tools/call request. */
+export function nestedCallMeta(
+	correlation: RequestCorrelation | undefined,
+): Record<string, unknown> | undefined {
+	if (!correlation) return undefined;
+	const meta: Record<string, unknown> = {};
+	if (correlation.chatId) meta[CHAT_SCOPE_META_KEY] = correlation.chatId;
+	const traceparent = childTraceparent(correlation.traceparent);
+	if (traceparent) meta[TRACEPARENT_META_KEY] = traceparent;
+	return Object.keys(meta).length > 0 ? meta : undefined;
+}
+
 export function getRequestScope(
 	source: MaybeExtra | string | undefined,
 ): string | undefined {
@@ -72,12 +145,12 @@ export function getRequestScope(
 	const fromMeta = source._meta?.[CHAT_SCOPE_META_KEY];
 	if (typeof fromMeta === "string" && fromMeta.length > 0) return fromMeta;
 
-	const headers = source.requestInfo?.headers;
-	if (headers) {
-		const raw = headers["mcp-chat-id"] ?? headers["Mcp-Chat-Id"];
-		const value = Array.isArray(raw) ? raw[0] : raw;
-		if (typeof value === "string" && value.length > 0) return value;
-	}
+	const fromHeader = headerValue(
+		source.requestInfo?.headers,
+		"mcp-chat-id",
+		"Mcp-Chat-Id",
+	);
+	if (fromHeader) return fromHeader;
 
 	const fromSession = source.sessionId;
 	if (typeof fromSession === "string" && fromSession.length > 0)

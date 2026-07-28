@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { hpaFetch } from "../lib/http";
+import { describeUpstreamError } from "../lib/upstream-error";
 import {
     createCodeModeResponse,
     createCodeModeError,
@@ -53,7 +54,9 @@ export function registerSearch(server: McpServer, env?: SearchEnv): void {
 
                 if (!response.ok) {
                     const body = await response.text().catch(() => "");
-                    throw new Error(`HPA API error: HTTP ${response.status}${body ? ` - ${body.slice(0, 300)}` : ""}`);
+                    // HPA answers errors with a full HTML page; describeUpstreamError
+                    // keeps actionable bodies and replaces markup with a short reason.
+                    throw new Error(describeUpstreamError(response.status, body));
                 }
 
                 const data = await response.json();
