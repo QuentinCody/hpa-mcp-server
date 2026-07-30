@@ -1,4 +1,4 @@
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpServer } from "../mcp/stateless-worker";
 import { z } from "zod";
 import { serializedBytes } from "../agentic/lossless";
 import { canonicalJson, sha256Hex } from "../provenance/provenance";
@@ -163,7 +163,7 @@ export class ToolRegistry {
 	}
 
 	/**
-	 * Handle a tool call from a V8 isolate (via CodeModeProxy → DO RPC).
+	 * Handle a tool call from a V8 isolate through a caller-supplied proxy.
 	 */
 	async handleIsolateCall(
 		functionName: string,

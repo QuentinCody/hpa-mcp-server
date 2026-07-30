@@ -91,7 +91,6 @@ export { buildGraphqlProxySource } from "./codemode/graphql-proxy";
 export { buildGraphqlSchemaSource } from "./codemode/graphql-schema-source";
 export { introspectionToSummary } from "./codemode/graphql-to-typescript";
 // Code Mode infrastructure
-export { CodeModeProxy } from "./codemode/proxy";
 // Code Mode response helpers
 export {
 	type CodeModeResponse,

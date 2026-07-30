@@ -13,13 +13,12 @@
  * This helper centralizes the lookup so call sites don't have to know
  * which channel the scope arrived on. It tries, in order:
  *
- *   1. `extra._meta?.[CHAT_SCOPE_META_KEY]`
- *      — Spec-aligned. Set by clients that inject per-call `_meta`, including
- *        the orchestrator's nested tool calls.
+ *   1. `context.mcpReq._meta?.[CHAT_SCOPE_META_KEY]`, then the v1-compatible
+ *      `extra._meta` shape — Spec-aligned. Set by clients that inject per-call
+ *      `_meta`, including the orchestrator's nested tool calls.
  *
- *   2. `extra.requestInfo?.headers["mcp-chat-id"]`
- *      — HTTP header bridge. Set by the client on the transport's
- *        outbound headers for SDK paths without a per-call `_meta` hook.
+ *   2. `context.http.req.headers`, then v1's `extra.requestInfo.headers`
+ *      — HTTP header bridge for clients without a per-call `_meta` hook.
  *
  *   3. `extra.sessionId`
  *      — Legacy MCP transport session. Still populated by SDKs serving
@@ -57,6 +56,17 @@ export interface MaybeExtra {
 		[CHAT_SCOPE_META_KEY]?: string;
 		[k: string]: unknown;
 	};
+	/** MCP SDK v2 request context. */
+	mcpReq?: {
+		_meta?: {
+			[CHAT_SCOPE_META_KEY]?: string;
+			[k: string]: unknown;
+		};
+	};
+	/** MCP SDK v2 HTTP request context. */
+	http?: {
+		req?: Request;
+	};
 	/** Underlying HTTP request info (headers etc.) surfaced by the SDK. */
 	requestInfo?: {
 		headers?: Record<string, string | string[] | undefined>;
@@ -79,6 +89,13 @@ function headerValue(
 	return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
+function v2HeaderValue(
+	source: MaybeExtra | undefined,
+	name: string,
+): string | undefined {
+	return source?.http?.req?.headers.get(name) ?? undefined;
+}
+
 export function validTraceparent(value: unknown): string | undefined {
 	if (typeof value !== "string") return undefined;
 	const match = TRACEPARENT_PATTERN.exec(value);
@@ -91,7 +108,9 @@ export function getRequestTraceparent(
 	source: MaybeExtra | undefined,
 ): string | undefined {
 	return (
+		validTraceparent(source?.mcpReq?._meta?.[TRACEPARENT_META_KEY]) ??
 		validTraceparent(source?._meta?.[TRACEPARENT_META_KEY]) ??
+		validTraceparent(v2HeaderValue(source, "traceparent")) ??
 		validTraceparent(
 			headerValue(source?.requestInfo?.headers, "traceparent", "Traceparent"),
 		)
@@ -142,8 +161,13 @@ export function getRequestScope(
 	if (source == null) return undefined;
 	if (typeof source === "string") return source.length > 0 ? source : undefined;
 
-	const fromMeta = source._meta?.[CHAT_SCOPE_META_KEY];
+	const fromMeta =
+		source.mcpReq?._meta?.[CHAT_SCOPE_META_KEY] ??
+		source._meta?.[CHAT_SCOPE_META_KEY];
 	if (typeof fromMeta === "string" && fromMeta.length > 0) return fromMeta;
+
+	const fromV2Header = v2HeaderValue(source, "mcp-chat-id");
+	if (fromV2Header) return fromV2Header;
 
 	const fromHeader = headerValue(
 		source.requestInfo?.headers,

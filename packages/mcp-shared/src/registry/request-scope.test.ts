@@ -44,6 +44,25 @@ describe("getRequestScope", () => {
 		expect(getRequestScope(extra)).toBe("chat-1");
 	});
 
+	it("reads MCP SDK v2 request metadata before compatibility metadata", () => {
+		const extra: MaybeExtra = {
+			mcpReq: { _meta: { [CHAT_SCOPE_META_KEY]: "v2-chat" } },
+			_meta: { [CHAT_SCOPE_META_KEY]: "legacy-chat" },
+		};
+		expect(getRequestScope(extra)).toBe("v2-chat");
+	});
+
+	it("reads the MCP SDK v2 HTTP request header", () => {
+		const extra: MaybeExtra = {
+			http: {
+				req: new Request("https://example.test/mcp", {
+					headers: { "mcp-chat-id": "v2-header-chat" },
+				}),
+			},
+		};
+		expect(getRequestScope(extra)).toBe("v2-header-chat");
+	});
+
 	it("ignores the legacy bare _meta.app.chatId shape", () => {
 		const extra = {
 			_meta: { app: { chatId: "legacy" } },
@@ -165,6 +184,21 @@ describe("getRequestScope", () => {
 });
 
 describe("request trace correlation", () => {
+	it("reads MCP SDK v2 request metadata before the transport header", () => {
+		const extra: MaybeExtra = {
+			mcpReq: { _meta: { [TRACEPARENT_META_KEY]: TRACEPARENT } },
+			http: {
+				req: new Request("https://example.test/mcp", {
+					headers: {
+						traceparent:
+							"00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-00",
+					},
+				}),
+			},
+		};
+		expect(getRequestTraceparent(extra)).toBe(TRACEPARENT);
+	});
+
 	it("reads valid trace context from metadata before the transport header", () => {
 		const extra: MaybeExtra = {
 			_meta: { [TRACEPARENT_META_KEY]: TRACEPARENT },

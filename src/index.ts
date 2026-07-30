@@ -1,6 +1,6 @@
 import { buildHealthResponse, configureCitationSigning } from "@bio-mcp/shared";
-import { McpAgent } from "agents/mcp";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StatelessMcpWorker } from "@bio-mcp/shared/mcp";
+import { McpServer } from "@bio-mcp/shared/mcp";
 import { registerSearch } from "./tools/search";
 import { registerGeneLookup } from "./tools/gene-lookup";
 import { registerQueryData } from "./tools/query-data";
@@ -15,7 +15,7 @@ interface HpaEnv {
     CODE_MODE_LOADER: WorkerLoader;
 }
 
-export class MyMCP extends McpAgent {
+export class MyMCP extends StatelessMcpWorker {
     server = new McpServer({
         name: "hpa",
         version: "0.1.0",
@@ -42,7 +42,7 @@ export default {
         }
 
         if (url.pathname === "/mcp") {
-            return MyMCP.serve("/mcp", { binding: "MCP_OBJECT" }).fetch(request, env, ctx);
+            return MyMCP.serve("/mcp").fetch(request, env, ctx);
         }
 
         return new Response("Not found", { status: 404 });

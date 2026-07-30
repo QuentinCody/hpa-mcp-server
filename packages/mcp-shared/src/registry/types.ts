@@ -18,7 +18,7 @@ export interface ToolRequestContext {
 
 /**
  * Context passed to every tool handler.
- * Provides access to platform primitives without coupling tools to McpAgent.
+ * Provides access to platform primitives without coupling tools to a transport adapter.
  */
 export interface ToolContext {
 	sql: SqlTaggedTemplate;
