@@ -5,7 +5,7 @@ export const hpaCatalog: ApiCatalog = {
     baseUrl: "https://www.proteinatlas.org",
     version: "24.0",
     auth: "none",
-    endpointCount: 5,
+    endpointCount: 3,
     notes:
         "- Gene data is accessed via /{ENSG_ID}.json (Ensembl gene ID)\n" +
         "- Search via /api/search_download.php with query params\n" +
