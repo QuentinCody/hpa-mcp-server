@@ -7,9 +7,9 @@
  * `hpa_gene_lookup` returning `HTTP 404 - <!DOCTYPE HTML><html><head><title>The
  * Human Protein Atlas</title>...` as its entire diagnostic.
  *
- * An HTML body carries no machine-usable detail, so it is replaced with a short
- * marker. Non-HTML bodies (JSON errors, plain text) are still useful and are
- * kept, truncated.
+ * Human summaries replace HTML with a short marker and truncate other bodies.
+ * The transport separately retains the bounded native body and its provenance
+ * in structured error evidence, staging it when necessary.
  */
 
 const MAX_BODY_CHARS = 300;

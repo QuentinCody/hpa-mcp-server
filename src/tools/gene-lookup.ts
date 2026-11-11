@@ -1,12 +1,11 @@
 import type { McpServer } from "@bio-mcp/shared/mcp";
 import { z } from "zod";
-import { hpaFetch } from "../lib/http";
-import { describeUpstreamError } from "../lib/upstream-error";
+import { createHpaApiFetch } from "../lib/api-adapter";
+import { hpaResponse } from "../lib/tool-result";
 import {
     createCodeModeResponse,
     createCodeModeError,
 } from "@bio-mcp/shared/codemode/response";
-import { shouldStage, stageToDoAndRespond } from "@bio-mcp/shared/staging/utils";
 
 interface LookupEnv {
     HPA_DATA_DO?: {
@@ -16,65 +15,36 @@ interface LookupEnv {
 }
 
 export function registerGeneLookup(server: McpServer, env?: LookupEnv): void {
-    server.registerTool(
-        "hpa_gene_lookup",
+    for (const toolName of ["hpa_gene_lookup", "mcp_hpa_gene_lookup"]) server.registerTool(
+        toolName,
         {
             title: "HPA Gene Lookup",
             description:
-                "Look up a gene in the Human Protein Atlas by Ensembl ID. Returns comprehensive data: tissue expression (44 tissues), subcellular localization, pathology (cancer vs normal), cancer prognostics, and protein annotations.",
+                "Look up a gene in the Human Protein Atlas by Ensembl ID. Returns the provider JSON subset; XML contains more comprehensive data. Use Code Mode DVP discovery for cell-type protein intensity.",
             inputSchema: {
                 ensembl_id: z
                     .string()
-                    .min(1)
+                    .regex(/^ENSG\d{11}$/)
                     .describe("Ensembl gene ID (e.g. 'ENSG00000141510' for TP53)"),
             },
         },
         async (args, extra) => {
             const runtimeEnv = env || (extra as { env?: LookupEnv })?.env;
-            try {
-                const ensemblId = String(args.ensembl_id).trim();
+            return hpaResponse(async () => {
+                try {
+                    const ensemblId = String(args.ensembl_id).trim();
 
-                const response = await hpaFetch(`/${ensemblId}.json`);
+                    const {data} = await createHpaApiFetch()({method: "GET", path: `/gene/${ensemblId}`});
 
-                if (!response.ok) {
-                    const body = await response.text().catch(() => "");
-                    // HPA answers errors with a full HTML page; describeUpstreamError
-                    // keeps actionable bodies and replaces markup with a short reason.
-                    throw new Error(describeUpstreamError(response.status, body));
+                    return createCodeModeResponse(data, {
+                        meta: { fetched_at: new Date().toISOString() },
+                    });
+                } catch (err) {
+                    const msg = err instanceof Error ? err.message : String(err);
+                    const evidence = err as {status?: number; data?: unknown};
+                    return createCodeModeError("API_ERROR", `hpa_gene_lookup failed: ${msg}`, {status: evidence.status, data: evidence.data});
                 }
-
-                const data = await response.json();
-
-                const responseSize = JSON.stringify(data).length;
-                if (shouldStage(responseSize) && runtimeEnv?.HPA_DATA_DO) {
-                    const staged = await stageToDoAndRespond(
-                        data,
-                        runtimeEnv.HPA_DATA_DO as DurableObjectNamespace,
-                        "gene_lookup",
-                        undefined,
-                        undefined,
-                        "hpa",
-                        (extra as Record<string, unknown>),
-                    );
-                    return createCodeModeResponse(
-                        {
-                            staged: true,
-                            data_access_id: staged.dataAccessId,
-                            total_rows: staged.totalRows,
-                            _staging: staged._staging,
-                            message: `HPA gene data staged. Use hpa_query_data with data_access_id '${staged.dataAccessId}' to query.`,
-                        },
-                        { meta: { staged: true, data_access_id: staged.dataAccessId } },
-                    );
-                }
-
-                return createCodeModeResponse(data, {
-                    meta: { fetched_at: new Date().toISOString() },
-                });
-            } catch (err) {
-                const msg = err instanceof Error ? err.message : String(err);
-                return createCodeModeError("API_ERROR", `hpa_gene_lookup failed: ${msg}`);
-            }
+            }, runtimeEnv || {}, toolName, extra, args);
         },
     );
 }

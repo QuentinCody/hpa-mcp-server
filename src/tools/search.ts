@@ -1,12 +1,11 @@
 import type { McpServer } from "@bio-mcp/shared/mcp";
 import { z } from "zod";
-import { hpaFetch } from "../lib/http";
-import { describeUpstreamError } from "../lib/upstream-error";
+import { createHpaApiFetch } from "../lib/api-adapter";
+import { hpaResponse } from "../lib/tool-result";
 import {
     createCodeModeResponse,
     createCodeModeError,
 } from "@bio-mcp/shared/codemode/response";
-import { shouldStage, stageToDoAndRespond } from "@bio-mcp/shared/staging/utils";
 
 interface SearchEnv {
     HPA_DATA_DO?: {
@@ -16,8 +15,8 @@ interface SearchEnv {
 }
 
 export function registerSearch(server: McpServer, env?: SearchEnv): void {
-    server.registerTool(
-        "hpa_gene_search",
+    for (const toolName of ["hpa_gene_search", "mcp_hpa_gene_search"]) server.registerTool(
+        toolName,
         {
             title: "Search Human Protein Atlas",
             description:
@@ -30,9 +29,9 @@ export function registerSearch(server: McpServer, env?: SearchEnv): void {
                 columns: z
                     .string()
                     .optional()
-                    .describe("Comma-separated column codes to include (e.g. 'g,eg,up,rnats,rnatspm'). Default: gene name, Ensembl, UniProt."),
+                    .describe("Comma-separated column codes to include (e.g. 'g,eg,up,rnats,rnatsm'). Default: gene name, Ensembl, UniProt."),
                 format: z
-                    .string()
+                    .enum(["json", "tsv"])
                     .default("json")
                     .optional()
                     .describe("Response format: 'json' or 'tsv' (default: json)"),
@@ -40,59 +39,35 @@ export function registerSearch(server: McpServer, env?: SearchEnv): void {
         },
         async (args, extra) => {
             const runtimeEnv = env || (extra as { env?: SearchEnv })?.env;
-            try {
-                const params: Record<string, unknown> = {
-                    search: String(args.search),
-                    format: args.format || "json",
-                    compress: "no",
-                };
-                if (args.columns) {
-                    params.columns = String(args.columns);
-                }
+            return hpaResponse(async () => {
+                try {
+                    const params: Record<string, unknown> = {
+                        search: String(args.search),
+                        format: args.format || "json",
+                        compress: "no",
+                        columns: "g,eg,up",
+                    };
+                    if (args.columns) {
+                        params.columns = String(args.columns);
+                    }
 
-                const response = await hpaFetch("/api/search_download.php", params);
+                    const {data} = await createHpaApiFetch()({method: "GET", path: "/search", params});
 
-                if (!response.ok) {
-                    const body = await response.text().catch(() => "");
-                    // HPA answers errors with a full HTML page; describeUpstreamError
-                    // keeps actionable bodies and replaces markup with a short reason.
-                    throw new Error(describeUpstreamError(response.status, body));
-                }
-
-                const data = await response.json();
-
-                const responseSize = JSON.stringify(data).length;
-                if (shouldStage(responseSize) && runtimeEnv?.HPA_DATA_DO) {
-                    const staged = await stageToDoAndRespond(
-                        data,
-                        runtimeEnv.HPA_DATA_DO as DurableObjectNamespace,
-                        "search",
-                        undefined,
-                        undefined,
-                        "hpa",
-                        (extra as Record<string, unknown>),
+                    if (params.format === "tsv") return createCodeModeResponse(
+                        {format: "tsv", data, total: null},
+                        {meta: {fetched_at: new Date().toISOString()}},
                     );
+                    const results = Array.isArray(data) ? data : [data];
                     return createCodeModeResponse(
-                        {
-                            staged: true,
-                            data_access_id: staged.dataAccessId,
-                            total_rows: staged.totalRows,
-                            _staging: staged._staging,
-                            message: `Search results staged. Use hpa_query_data with data_access_id '${staged.dataAccessId}' to query.`,
-                        },
-                        { meta: { staged: true, data_access_id: staged.dataAccessId } },
+                        { results, total: results.length },
+                        { meta: { fetched_at: new Date().toISOString(), total: results.length } },
                     );
+                } catch (err) {
+                    const msg = err instanceof Error ? err.message : String(err);
+                    const evidence = err as {status?: number; data?: unknown};
+                    return createCodeModeError("API_ERROR", `hpa_search failed: ${msg}`, {status: evidence.status, data: evidence.data});
                 }
-
-                const results = Array.isArray(data) ? data : [data];
-                return createCodeModeResponse(
-                    { results, total: results.length },
-                    { meta: { fetched_at: new Date().toISOString(), total: results.length } },
-                );
-            } catch (err) {
-                const msg = err instanceof Error ? err.message : String(err);
-                return createCodeModeError("API_ERROR", `hpa_search failed: ${msg}`);
-            }
+            }, runtimeEnv || {}, toolName, extra, args);
         },
     );
 }

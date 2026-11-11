@@ -1,3 +1,4 @@
+import { hpaResponse } from "../lib/tool-result";
 import type { McpServer } from "@bio-mcp/shared/mcp";
 import { z } from "zod";
 import { createQueryDataHandler } from "@bio-mcp/shared/staging/utils";
@@ -9,8 +10,8 @@ interface QueryEnv {
 export function registerQueryData(server: McpServer, env?: QueryEnv): void {
     const handler = createQueryDataHandler("HPA_DATA_DO", "hpa");
 
-    server.registerTool(
-        "hpa_query_data",
+    for (const toolName of ["hpa_query_data", "mcp_hpa_query_data"]) server.registerTool(
+        toolName,
         {
             title: "Query Staged HPA Data",
             description:
@@ -23,7 +24,7 @@ export function registerQueryData(server: McpServer, env?: QueryEnv): void {
         },
         async (args, extra) => {
             const runtimeEnv = env || (extra as { env?: QueryEnv })?.env || {};
-            return handler(args as Record<string, unknown>, runtimeEnv as Record<string, unknown>);
+            return hpaResponse(() => handler(args as Record<string, unknown>, runtimeEnv as Record<string, unknown>), runtimeEnv, toolName, extra, args);
         },
     );
 }

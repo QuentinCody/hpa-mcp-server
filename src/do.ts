@@ -5,16 +5,8 @@ export class HpaDataDO extends RestStagingDO {
     protected getSchemaHints(data: unknown): SchemaHints | undefined {
         if (!data || typeof data !== "object") return undefined;
 
-        // Single gene entry (has Ensembl ID)
-        const obj = data as Record<string, unknown>;
-        if (obj.Ensembl && typeof obj.Ensembl === "string") {
-            // Gene-level data with tissue expression, pathology, etc.
-            return {
-                tableName: "gene_data",
-                indexes: ["Gene", "Ensembl", "Uniprot"],
-            };
-        }
-
+        // Keep parallel gene arrays in separate inferred tables; a fixed name
+        // would collapse Uniprot, tissue and pathology collections into one.
         if (Array.isArray(data)) {
             const sample = data[0];
             if (sample && typeof sample === "object") {
